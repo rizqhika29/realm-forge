@@ -892,10 +892,13 @@ class RealmForge(gl.Contract):
         if blocker:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} {blocker}")
 
-        # Atomic home-game swap: ownership, provenance counters, and both
-        # game indexes update in this single write. No intermediate state
-        # exists in which the item is neither here nor there.
+        # Atomic home-game swap: ownership, provenance counters, both game
+        # indexes, and both per-game item counts update in this single write.
+        # No intermediate state exists in which the item is neither here nor
+        # there, and get_game(...).item_count stays consistent with
+        # get_game_items(...) across repeated A-to-B-to-A bridges.
         old_home = item.home_game
+        origin = self.games.get(old_home)
         item.home_game = target_game_id
         item.home_changed_at = _current_timestamp()
         item.bridge_count = item.bridge_count + u256(1)
@@ -908,6 +911,9 @@ class RealmForge(gl.Contract):
             self.game_item_index.get(target_game_id), token_id
         )
 
+        if origin is not None:
+            origin.item_count = origin.item_count - u256(1)
+            self.games[old_home] = origin
         target.item_count = target.item_count + u256(1)
         self.games[target_game_id] = target
 
